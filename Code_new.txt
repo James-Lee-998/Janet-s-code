@@ -1,0 +1,84 @@
+import pandas as pd
+from selenium import webdriver
+import time
+import requests #permission for website domains
+from requests import get #just an extension of requests
+from bs4 import BeautifulSoup #bs4 is the python 3 soup which compiles imformation from onilne
+import pandas as pd #mostly used for sorting data
+import numpy as np 
+from bs4 import BeautifulSoup, SoupStrainer #can differentiate HTML classes on a more accurate scale
+import httplib2
+import json
+import lxml.html
+#made a csv file for all the plants on the google sheet list
+List= np.genfromtxt('C:/Users/tongh/Documents/Plants_many.csv', delimiter = ',', dtype =str) 
+List_of_plants = List[:].tolist()
+Latin_nm = []
+Author_1 = []
+Fams = []
+edible = []
+Ref = []
+Latin_name_check = []
+medi = []
+Description = []
+Hazards = []
+All = []
+#function to extract information from each of the species collecting botanical references,Latin names, Edibility 
+def extract(t):
+  for x in t:
+   driver = webdriver.Edge("C:/Users/tongh/Documents/edgedriver_win64/msedgedriver.exe") 
+   url = "http://tropical.theferns.info/viewtropical.php?id=" + x
+   driver.get(url)
+   headers = {'Accept-Language': 'en, en;q=0.5'}
+   results = requests.get(url, headers=headers)
+   soup = BeautifulSoup(results.text, 'html.parser')
+   plant_tr_1 = soup.find_all('div', class_ = 'latin_name')
+   plant_tr_2 = soup.find_all('div', class_ = 'author')
+   plant_tr_3 = soup.find_all('div', class_ = 'family')
+   plant_tr_4 = soup.find_all('div', class_ = 'ref')
+   for container in plant_tr_1:
+    name = container.h1.text
+    Latin_nm.append(name)
+   for container in plant_tr_2: 
+    au = container.h4.text
+    Author_1.append(au)
+   for container in plant_tr_3:
+    f = container.h4.text
+    Fams.append(f)
+   for container in plant_tr_4:
+    s = container.a.text
+    Ref.append(s)
+    
+def extract_pfaf(t):
+    for x in t:
+     html = requests.get('https://pfaf.org/user/Plant.aspx?LatinName=' + x)
+     doc = lxml.html.fromstring(html.content)
+     fish = doc.xpath('//*[@id="ctl00_ContentPlaceHolder1_lblPhystatment"]/text()[1]')
+     Description.append(fish)
+     fish_1 = doc.xpath('//*[@id="ctl00_ContentPlaceHolder1_txtEdibleUses"]/text()[4] + [5]')
+     edible.append(fish_1)
+     fish_2 = doc.xpath('//*[@id="ctl00_ContentPlaceHolder1_txtMediUses"]/text()[2] + [3]')
+     medi.append(fish_2)
+     fish_3 = doc.xpath('//*[@id="ctl00_ContentPlaceHolder1_lblKnownHazards"]/text()')
+     Hazards.append(fish_3)
+
+def extract_info(t):
+    for x in t:
+     html = requests.get('http://tropical.theferns.info/viewtropical.php?id=' + x)
+     doc = lxml.html.fromstring(html.content)
+     edible_2 = doc.xpath('/html/body/div[2]/div[1]/text()')
+     edible_3 = doc.xpath('/html/body/div[2]/div[1]/[text() = edible_2]/following-sibling::div/a/text()')[0].strip()
+     All.append(edible_2 + edible_3)
+
+#Database.xlsx is the excel file with all the data 
+extract(List_of_plants)   
+extract_pfaf(List_of_plants)
+extract_info(List_of_plants)
+import openpyxl
+List_important = [Latin_nm] + [Author_1] + [Fams] + [Ref]
+pd.DataFrame(List_important).to_excel('List_of_plants.xlsx', header = False, index = False)
+pd.DataFrame(Description).to_excel('Descriptions.xlsx', header = False, index = False)
+pd.DataFrame(edible).to_excel('Edibility.xlsx', header = False, index = False)
+pd.DataFrame(medi).to_excel('Medical.xlsx', header = False, index = False)
+pd.DataFrame(Hazards).to_excel('Hazards.xlsx', header = False, index = False)
+pd.DataFrame(All).to_excel('Everything.xlsx', header = False, index = False)
