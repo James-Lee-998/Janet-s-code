@@ -1,0 +1,95 @@
+---
+---
+title: "JANET_RGBIF"
+author: "James Lee"
+date: "18/06/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+#relevant libraries
+library(rgbif)
+library(openssl)
+library(spocc)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(ggspatial)
+library(rnaturalearth)
+library(tidygeocoder)
+library(ggrepel)
+library(sf)
+library(rgeos)
+```
+
+##List of Species
+
+A testing data set. Below we read in the data.
+
+```{r}
+List_of_Species = read.csv('D:/Janet.csv')
+head(List_of_Species)
+```
+
+##Using the gbif API
+
+We can access the gbif API to give us relevant information about each species whilst also simultaneously using this information to clean our results. (I separately mutate multiple columns within each dataframe retrieved from the API to show the information we use to plot later)
+
+```{r}
+X = List_of_Species %>%
+  mutate(keys = map(Taxon, function(x) name_backbone(name = x)$speciesKey)) %>% # obtain initial dataframe information by using keys 
+  mutate(rgbif_pull  = map(keys, occ_search, limit = 200)) %>% # use keys to gather dataframe information
+  mutate(Latitude = map(rgbif_pull, pluck, 'data', 'decimalLatitude')) %>% #pluck latitude
+  mutate(Longitude = map(rgbif_pull, pluck, 'data', 'decimalLongitude')) %>%# pluck longitude
+  mutate(Year = map(rgbif_pull, pluck, 'data', 'year')) %>% # pluck year
+  mutate(Source = map(rgbif_pull, pluck, 'data', 'datasetName')) %>% # pluck source
+  select(Taxon, Latitude, Longitude, Year, Source) %>% # obtain latitude and longitude occurrence data
+  filter(Longitude != 'NULL') %>% # filter NULLs
+  filter(Source != 'NULL') %>%
+  filter(Year != 'NULL')
+
+P = c()
+
+#for loop to clean data and get it into a format we care about and we can easily plot
+
+for (i in 1:nrow(X)) {
+  Y = cbind(X$Latitude[[i]],X$Longitude[[i]])
+  Z = cbind(X$Year[[i]],X$Source[[i]])
+  O = rep(X$Taxon[i], each = nrow(Y))
+  Q = cbind(O,Y,Z)
+  P = rbind(P,Q)
+}
+
+#produce a tibble with renamed headers and make Species a factor
+
+ALL_DATA = P %>%
+  as_tibble %>%
+  na.omit() %>%
+  rename(., c(Species = O, Lat = V2, Lon = V3, Year = V4, Source = V5)) %>%
+  mutate(Lat = as.double(Lat)) %>%
+  mutate(Lon = as.double(Lon)) %>%
+  mutate(Species = as.factor(Species)) %>%
+  filter(Lon < 98, Lon > 68, Lat < 37, Lat > 8)
+
+head(ALL_DATA)
+```
+
+Now we have a dataframe which contains co-ordinate data for all the species we care about and the relevant year and source of occurrence 
+
+```{r message=FALSE, warning=FALSE}
+world = ne_countries(country = 'india') %>%
+  st_as_sf()
+
+test_plot = ggplot() +
+  geom_sf(data = world) +
+  geom_point(data = ALL_DATA, 
+             aes(x = Lon, y = Lat, fill = Species, color = Year, label = Source),
+             size = 0.5) +
+  theme(legend.position = 'none')
+  
+
+ggplotly(test_plot)
+```
+
